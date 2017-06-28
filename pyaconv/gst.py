@@ -1,6 +1,7 @@
-from collections import deque
 import os
-import sys
+
+from .fsutil import Path
+from . import logging
 
 import gi
 gi.require_version('Gst', '1.0')
@@ -10,12 +11,7 @@ GObject.threads_init()
 Gst.init(None)
 
 
-def printf(fmt, *args, fd=sys.stdout):
-    fd.write(fmt % (args))
-    fd.flush()
-
-
-class RawEncoder:
+class BaseEncoder:
 
     def __init__(self, *, loop, src, dest, eos_cb=None, err_cb=None,
                  pipeline_desc=None):
@@ -43,7 +39,8 @@ class RawEncoder:
         # print(Gst.message_type_get_name(message.type))
         if message.type == Gst.MessageType.EOS:
             if self._eos_cb is not None:
-                self._eos_cb()
+                self._eos_cb(self._src.get_property("location"),
+                             self._dest.get_property("location"))
         elif message.type == Gst.MessageType.ERROR:
             err, _ = message.parse_error()
             src_elem = None
@@ -56,11 +53,12 @@ class RawEncoder:
             return True
         return False
 
+
 _OPUS_PIPELINE = """filesrc name=src ! decodebin ! audioconvert ! \
 audioresample ! opusenc name=enc ! oggmux ! filesink name=dest"""
 
 
-class OpusEncoder(RawEncoder):
+class OpusEncoder(BaseEncoder):
 
     def __init__(self, *, loop, bitrate=64000, bitrate_type="vbr",
                  **kwargs):
@@ -71,18 +69,24 @@ class OpusEncoder(RawEncoder):
 
 class Worker:
 
-    def __init__(self, loop, queue, finished_cb):
+    def __init__(self, loop, queue, journal, finished_cb):
         self._loop = loop
         self._queue = queue
+        self._journal = journal
         self._finished = False
         self._finished_cb = finished_cb
+
+    def _eos_cb(self, src, dest):
+        dest = Path(dest)
+        self._journal.add(dest)
+        self._next()
 
     def _next(self):
         if len(self._queue) > 0:
             src, dest = self._queue.popleft()
-            printf("Encoding: %s\n", src)
+            logging.info("encoding {}", src.absolute())
             enc = OpusEncoder(loop=self._loop, src=src, dest=dest,
-                              eos_cb=self._next,
+                              eos_cb=self._eos_cb,
                               err_cb=self._error)
             enc.start()
         else:
@@ -98,35 +102,32 @@ class Worker:
 
     def _error(self, error_msg, src_elem):
         if src_elem is not None:
-            printf("Error in element '%s': %s\n", src_elem,
-                   error_msg,
-                   fd=sys.stderr)
+            logging.error("gstreamer error in element '{}': {}\n", src_elem,
+                          error_msg)
         else:
-            printf("Error: %s", error_msg, fd=sys.stderr)
+            logging.error("gstreamer error: %s", error_msg)
         self._loop.quit()
 
 
 class Scheduler:
 
-    def __init__(self, queue, threads=None):
+    def __init__(self, queue, journal, threads=None):
         if threads is None:
-            threads = os.cpu_count() - 1
+            threads = max(1, os.cpu_count() - 1)
         self._loop = GObject.MainLoop()
-        self._workers = [Worker(self._loop, queue, self._worker_finished)
+        self._workers = [Worker(self._loop, queue, journal,
+                                self._worker_finished)
                          for _ in range(threads)]
+        self._has_quit = False
 
     def _worker_finished(self):
         if all(w.finished for w in self._workers):
+            self._has_quit = True
             self._loop.quit()
 
     def run(self):
         for w in self._workers:
             w.start()
-        self._loop.run()
-
-# pairs = deque()
-# for arg in sys.argv[1:]
-
-files = deque((file_src, file_src + '.ogg') for file_src in sys.argv[1:])
-s = Scheduler(files)
-s.run()
+        # check for early exits when the queue is empty
+        if not self._has_quit:
+            self._loop.run()
