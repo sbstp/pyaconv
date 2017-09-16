@@ -12,7 +12,7 @@ class Path(_SuperPath):
         return Path(os.path.abspath(str(self)))
 
 
-def walk(src_dir, dest_dir):
+def walk(src_dir, dest_dir, extension):
     """
     Recursively walks the source directory and categorizes files as audio or
     other.
@@ -39,7 +39,7 @@ def walk(src_dir, dest_dir):
                 kind, _ = mimetypes.guess_type(f.absolute().as_uri())
                 clone_path = dest_dir / f.relative_to(src_dir)
                 if kind is not None and kind.startswith("audio/"):
-                    clone_path = clone_path.with_suffix(".ogg")
+                    clone_path = clone_path.with_suffix("." + extension)
                     audio_files.append((f, clone_path))
                 else:
                     other_files.append((f, clone_path))
