@@ -100,3 +100,9 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# virtualenv
+bin/
+include/
+lib/
+share/

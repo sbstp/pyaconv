@@ -16,7 +16,7 @@ _level_map = {
 
 def log(level, fmt, *args, **kwargs):
     fd = sys.stdout if level <= INFO else sys.stderr
-    print('{}:{}'.format(_level_map[level], fmt.format(*args, **kwargs)),
+    print('{}: {}'.format(_level_map[level], fmt.format(*args, **kwargs)),
           file=fd)
 
 

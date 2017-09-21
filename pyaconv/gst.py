@@ -1,14 +1,69 @@
+from gi.repository import GObject, Gst
 import os
+
 
 from .fsutil import Path
 from . import logging
 
-import gi
-gi.require_version('Gst', '1.0')
-from gi.repository import GObject, Gst  # noqa
 
-GObject.threads_init()
-Gst.init(None)
+class BaseProperty:
+
+    def __init__(self, name, help=None):
+        self.name = name
+        self.help = help
+
+    def add_argument(self, arg_parser):
+        raise NotImplementedError
+
+
+class Property(BaseProperty):
+
+    def __init__(self, name, *, type, default, help=None):
+        super().__init__(name, help)
+        self.type = type
+        self.default = default
+
+    def add_argument(self, arg_parser):
+        if self.type is not bool:
+            arg_parser.add_argument("--" + self.name, type=self.type, default=self.default, metavar="",
+                                    help=self.help + " (default: {})".format(self.default))
+        else:
+            true_def = " (default)" if self.default else ""
+            false_def = " (default)" if not self.default else ""
+            arg_parser.add_argument("--" + self.name, default=self.default,
+                                    help=self.help + true_def, dest=self.name, action="store_true")
+            arg_parser.add_argument("--no-" + self.name, default=self.default, help="no " + self.help + false_def,
+                                    dest=self.name, action="store_false")
+
+
+class PropertyEnum(BaseProperty):
+
+    def __init__(self, name, *, values, default, type=str, help=None):
+        assert default in values
+        super().__init__(name, help)
+        self.values = values
+        self.default = default
+        self.type = type
+
+    def add_argument(self, arg_parser):
+        s = ', '.join(str(v) for v in self.values)
+        arg_parser.add_argument("--" + self.name, choices=self.values, default=self.default, type=self.type,
+                                help=self.help + " (default: {}) {{{}}}".format(self.default, s), metavar="")
+
+
+class PropertyRange(BaseProperty):
+
+    def __init__(self, name, *, min, max, default, help=None):
+        assert min <= default <= max
+        super().__init__(name, help)
+        self.min = min
+        self.max = max
+        self.default = default
+
+    def add_argument(self, arg_parser):
+        arg_parser.add_argument("--" + self.name, type=int, choices=range(
+            self.min, self.max + 1), default=self.default, help=self.help + " (default: {})".format(self.default),
+            metavar="[{}-{}]".format(self.min, self.max))
 
 
 class BaseEncoder:
@@ -30,7 +85,7 @@ class BaseEncoder:
         self._src.set_property("location", src)
         self._dest.set_property("location", dest)
 
-        self.apply_props(props)
+        self.apply_props(props, self._enc)
 
     def start(self):
         """
@@ -59,7 +114,7 @@ class BaseEncoder:
             return True
         return False
 
-    def apply_props(self, props):
+    def apply_props(self, props, enc):
         """
         Called to apply the properties to the gstreamer encoder module, after initialization.
         """
@@ -87,172 +142,6 @@ class BaseEncoder:
         objects from the pipeline.
         """
         raise NotImplementedError
-
-
-_OPUS_PIPELINE = """filesrc name=src ! decodebin ! audioconvert ! \
-audioresample ! opusenc name=enc ! oggmux ! filesink name=dest"""
-
-
-class BaseProperty:
-
-    def __init__(self, name, help=None):
-        self.name = name
-        self.help = help
-
-    def add_argument(self, arg_parser):
-        raise NotImplementedError
-
-
-class Property(BaseProperty):
-
-    def __init__(self, name, *, type, default, help=None):
-        super().__init__(name, help)
-        self.type = type
-        self.default = default
-
-    def add_argument(self, arg_parser):
-        if self.type is not bool:
-            arg_parser.add_argument("--" + self.name, type=self.type, default=self.default,
-                                    help=self.help + " (default: {})".format(self.default))
-        else:
-            true_def = " (default)" if self.default else ""
-            false_def = " (default)" if not self.default else ""
-            arg_parser.add_argument("--" + self.name, default=self.default,
-                                    help=self.help + true_def, dest=self.name, action="store_true")
-            arg_parser.add_argument("--no-" + self.name, default=self.default, help="no " + self.help + false_def,
-                                    dest=self.name, action="store_false")
-
-
-class PropertyEnum(BaseProperty):
-
-    def __init__(self, name, *, values, default, type=str, help=None):
-        assert default in values
-        super().__init__(name, help)
-        self.values = values
-        self.default = default
-        self.type = type
-
-    def add_argument(self, arg_parser):
-        arg_parser.add_argument("--" + self.name, choices=self.values, default=self.default, type=self.type,
-                                help=self.help + " (default: {})".format(self.default))
-
-
-class PropertyRange(BaseProperty):
-
-    def __init__(self, name, *, min, max, default, help=None):
-        assert min <= default <= max
-        super().__init__(name, help)
-        self.min = min
-        self.max = max
-        self.default = default
-
-    def add_argument(self, arg_parser):
-        arg_parser.add_argument("--" + self.name, type=int, choices=range(
-            self.min, self.max + 1), default=self.default, help=self.help + " (default: {})".format(self.default),
-            metavar="[{}-{}]".format(self.min, self.max))
-
-
-class OpusEncoder(BaseEncoder):
-
-    def apply_props(self, props):
-        self._enc.set_property("bitrate", props["bitrate"])
-        Gst.util_set_object_arg(self._enc, "bitrate-type", props["bitrate-type"])
-        Gst.util_set_object_arg(self._enc, "audio-type", props["audio-type"])
-
-    @classmethod
-    def properties(cls):
-        return (
-            Property("bitrate", type=int, default=64000, help="bitrate is bits per second"),
-            PropertyEnum("bitrate-type", values=["cbr", "vbr", "constrained_vbr"], default="vbr", help="bitrate type"),
-            PropertyEnum("audio-type", values=["generic", "voice"],
-                         default="generic", help="audio type to optimize for"),
-        )
-
-    @classmethod
-    def extension(cls):
-        return "ogg"
-
-    @classmethod
-    def pipeline(cls, _):
-        return _OPUS_PIPELINE
-
-
-_MP3_PIPELINE = """filesrc name=src ! decodebin ! audioconvert ! \
-audioresample ! lamemp3enc name=enc ! filesink name=dest"""
-
-
-class Mp3Encoder(BaseEncoder):
-
-    def apply_props(self, props):
-        self._enc.set_property("bitrate", props["bitrate"])
-        self._enc.set_property("cbr", props["cbr"])
-        self._enc.set_property("mono", props["mono"])
-        Gst.util_set_object_arg(self._enc, "encoding-engine-quality", props["encoding-engine-quality"])
-        Gst.util_set_object_arg(self._enc, "target", "bitrate")
-
-    @classmethod
-    def properties(cls):
-        # gst-inspect-1.0 lamemp3enc
-        return (
-            PropertyRange("bitrate", min=8, max=320, default=128, help="bitrate is kilobits per second"),
-            Property("cbr", type=bool, default=False, help="CBR encoding"),
-            PropertyEnum("encoding-engine-quality", values=["fast", "standard", "high"],
-                         default="high", help="quality/speed of the encoding engine"),
-            Property("mono", type=bool, default=False, help="mono encoding"),
-        )
-
-    @classmethod
-    def extension(cls):
-        return "mp3"
-
-    @classmethod
-    def pipeline(cls, _):
-        return _MP3_PIPELINE
-
-
-_FLAC_PIPELINE_16 = """filesrc name=src ! decodebin ! audioconvert ! \
-audioresample ! audio/x-raw, format=S16LE ! flacenc name=enc ! \
-filesink name=dest"""
-
-_FLAC_PIPELINE_24 = """filesrc name=src ! decodebin ! audioconvert ! \
-audioresample ! audio/x-raw, format=S24LE ! flacenc name=enc ! \
-filesink name=dest"""
-
-_FLAC_PIPELINE_32 = """filesrc name=src ! decodebin ! audioconvert ! \
-audioresample ! audio/x-raw, format=S24_32LE ! flacenc name=enc ! \
-filesink name=dest"""
-
-
-class FlacEncoder(BaseEncoder):
-
-    def apply_props(self, props):
-        self._enc.set_property("escape-coding", True)
-        self._enc.set_property("exhaustive-model-search", True)
-        Gst.util_set_object_arg(self._enc, "quality", props["quality"])
-
-    @classmethod
-    def properties(cls):
-        return (
-            PropertyEnum("bit-depth", values=[16, 24, 32], type=int, default=16, help="bit depth per sample"),
-            PropertyEnum("quality", values=[str(q) for q in range(0, 9)],
-                         default="5", help="compression quality: 0 fastest ; 8 best"),
-        )
-
-    @classmethod
-    def extension(cls):
-        return "flac"
-
-    @classmethod
-    def pipeline(cls, props):
-        depth = props["bit-depth"]
-        if depth == 16:
-            return _FLAC_PIPELINE_16
-        elif depth == 24:
-            return _FLAC_PIPELINE_24
-        elif depth == 32:
-            return _FLAC_PIPELINE_32
-        else:
-            raise ValueError("invalid bit depth, expected 16, 24 or 32")
 
 
 class Worker:
@@ -303,7 +192,6 @@ class Worker:
 class Scheduler:
 
     def __init__(self, queue, journal, *, encoder, props, threads=None):
-        print(props)
         if threads is None:
             threads = max(1, os.cpu_count() - 1)
         self._loop = GObject.MainLoop()

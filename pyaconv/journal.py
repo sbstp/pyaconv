@@ -2,7 +2,23 @@ from .fsutil import Path
 from . import logging
 
 
-class Journal:
+class BaseJournal:
+
+    def add(self, path):
+        raise NotImplementedError
+
+    def __contains__(self, item):
+        raise NotImplementedError
+
+    def __len__(self):
+        raise NotImplementedError
+
+    def remove_journaled(self, pairs):
+        raise NotImplementedError
+
+
+class Journal(BaseJournal):
+
     """
     This is a log of what has been cloned. In memory, files are kept
     as absolute paths. In the log file, the paths are saved in relative
@@ -44,3 +60,18 @@ class Journal:
                 logging.info("skipping {}", dest)
             else:
                 yield p
+
+
+class VoidJournal(BaseJournal):
+
+    def add(self, path):
+        pass
+
+    def __contains__(self, item):
+        return False
+
+    def __len__(self):
+        return 0
+
+    def remove_journaled(self, pairs):
+        return pairs
