@@ -1,7 +1,8 @@
 import mimetypes
 import os
 import pathlib
-
+import errno
+import shutil
 
 _SuperPath = type(pathlib.Path())
 
@@ -58,5 +59,11 @@ def build_tree(pairs):
 def hardlink_tree(pairs, journal):
     for src, copy in pairs:
         if not copy.exists():
-            os.link(str(src), str(copy))
+            try:
+                os.link(str(src), str(copy))
+            except OSError as e:
+                if e.errno == errno.EXDEV:
+                    shutil.copy(str(src), str(copy))
+                else:
+                    raise
             journal.add(copy.absolute())
