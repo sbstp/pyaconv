@@ -54,7 +54,6 @@ class PropertyEnum(BaseProperty):
 class PropertyRange(BaseProperty):
 
     def __init__(self, name, *, min, max, default, help=None):
-        assert min <= default <= max
         super().__init__(name, help)
         self.min = min
         self.max = max
@@ -62,7 +61,7 @@ class PropertyRange(BaseProperty):
 
     def add_argument(self, arg_parser):
         arg_parser.add_argument("--" + self.name, type=int, choices=range(
-            self.min, self.max + 1), default=self.default, help=self.help + " (default: {})".format(self.default),
+            self.min, self.max + 1), default=self.default or None, help=self.help + " (default: {})".format(self.default or "None"),
             metavar="[{}-{}]".format(self.min, self.max))
 
 

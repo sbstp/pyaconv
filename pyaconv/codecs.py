@@ -17,7 +17,8 @@ class OpusEncoder(BaseEncoder):
     def properties(cls):
         return (
             Property("bitrate", type=int, default=64000, help="bitrate is bits per second"),
-            PropertyEnum("bitrate-type", values=["cbr", "vbr", "constrained_vbr"], default="vbr", help="bitrate type"),
+            PropertyEnum("bitrate-type", values=["cbr", "vbr",
+                                                 "constrained_vbr"], default="vbr", help="bitrate type"),
             PropertyEnum("audio-type", values=["generic", "voice"],
                          default="generic", help="audio type to optimize for"),
         )
@@ -38,17 +39,26 @@ audioresample ! lamemp3enc name=enc ! filesink name=dest"""
 class Mp3Encoder(BaseEncoder):
 
     def apply_props(self, props, enc):
-        enc.set_property("bitrate", props["bitrate"])
-        enc.set_property("cbr", props["cbr"])
+        if props["bitrate"]:
+            Gst.util_set_object_arg(enc, "target", "bitrate")
+            enc.set_property("cbr", True)
+            enc.set_property("bitrate", props["bitrate"])
+        else:
+            Gst.util_set_object_arg(enc, "target", "quality")
+            enc.set_property("cbr", props["cbr"])
+            enc.set_property("quality", props["quality"])
+
         enc.set_property("mono", props["mono"])
         Gst.util_set_object_arg(enc, "encoding-engine-quality", props["encoding-engine-quality"])
-        Gst.util_set_object_arg(enc, "target", "bitrate")
 
     @classmethod
     def properties(cls):
         # gst-inspect-1.0 lamemp3enc
         return (
-            PropertyRange("bitrate", min=8, max=320, default=128, help="bitrate is kilobits per second"),
+            PropertyRange("bitrate", min=8, max=320, default=None,
+                          help="bitrate is kilobits per second (implies CBR)"),
+            PropertyRange("quality", min=0, max=10, default=4,
+                          help="quality 0 being best, 10 being worst"),
             Property("cbr", type=bool, default=False, help="CBR encoding"),
             PropertyEnum("encoding-engine-quality", values=["fast", "standard", "high"],
                          default="high", help="quality/speed of the encoding engine"),
@@ -87,7 +97,8 @@ class FlacEncoder(BaseEncoder):
     @classmethod
     def properties(cls):
         return (
-            PropertyEnum("bit-depth", values=[16, 24, 32], type=int, default=16, help="bit depth per sample"),
+            PropertyEnum("bit-depth", values=[16, 24, 32], type=int,
+                         default=16, help="bit depth per sample"),
             PropertyEnum("quality", values=[str(q) for q in range(0, 9)],
                          default="5", help="compression quality: 0 fastest ; 8 best"),
         )
