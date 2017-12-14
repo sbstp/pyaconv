@@ -31,9 +31,11 @@ class OpusEncoder(BaseEncoder):
     def pipeline(cls, _):
         return _OPUS_PIPELINE
 
+_MP3_PIPELINE_ID3 = """filesrc name=src ! decodebin ! audioconvert ! \
+audioresample ! lamemp3enc name=enc ! id3mux ! filesink name=dest"""
 
-_MP3_PIPELINE = """filesrc name=src ! decodebin ! audioconvert ! \
-audioresample ! lamemp3enc name=enc ! filesink name=dest"""
+_MP3_PIPELINE_ID3V2 = """filesrc name=src ! decodebin ! audioconvert ! \
+audioresample ! lamemp3enc name=enc ! id3v2mux ! filesink name=dest"""
 
 
 class Mp3Encoder(BaseEncoder):
@@ -63,6 +65,7 @@ class Mp3Encoder(BaseEncoder):
             PropertyEnum("encoding-engine-quality", values=["fast", "standard", "high"],
                          default="high", help="quality/speed of the encoding engine"),
             Property("mono", type=bool, default=False, help="mono encoding"),
+            Property("id3v2", type=bool, default=False, help="Use id3v2 tags")
         )
 
     @classmethod
@@ -70,8 +73,10 @@ class Mp3Encoder(BaseEncoder):
         return "mp3"
 
     @classmethod
-    def pipeline(cls, _):
-        return _MP3_PIPELINE
+    def pipeline(cls, props):
+        if props["id3v2"]:
+            return _MP3_PIPELINE_ID3V2
+        return _MP3_PIPELINE_ID3
 
 
 _FLAC_PIPELINE_16 = """filesrc name=src ! decodebin ! audioconvert ! \
