@@ -31,6 +31,7 @@ class OpusEncoder(BaseEncoder):
     def pipeline(cls, _):
         return _OPUS_PIPELINE
 
+
 _MP3_PIPELINE_ID3 = """filesrc name=src ! decodebin ! audioconvert ! \
 audioresample ! lamemp3enc name=enc ! id3mux ! filesink name=dest"""
 

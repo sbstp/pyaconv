@@ -18,6 +18,32 @@ def compute_paths(args):
     return src_dir, dest_dir
 
 
+def ask_folders(journal, src_dir, dest_dir, encoder):
+    audio_files = []
+    other_files = []
+
+    for path in src_dir.iterdir():
+        answer = ""
+        while answer.lower() not in ["y", "n"]:
+            answer = input("Include %s? [y/n]: " % path.name)
+
+        if answer.lower() == "y":
+            audio, other = fsutil.walk(path, dest_dir, encoder.extension(), src_dir)
+            audio_files.extend(audio)
+            other_files.extend(other)
+        else:
+            pass
+
+    other_files = deque(journal.remove_journaled(other_files))
+    audio_files = deque(journal.remove_journaled(audio_files))
+
+    fsutil.build_tree(other_files)
+    fsutil.build_tree(audio_files)
+    fsutil.hardlink_tree(other_files, journal)
+
+    return audio_files
+
+
 def walk_and_clone(journal, src_dir, dest_dir, encoder):
     audio_files, other_files = fsutil.walk(src_dir, dest_dir, encoder.extension())
 
@@ -53,7 +79,10 @@ def main():
                    required=True, help="codec to use")
     p.add_argument("-t", type=int, dest="threads", default=max(1, os.cpu_count() - 1), metavar="",
                    help="number of threads, defaults to cpu count - 1")
-    p.add_argument("--no-inc", default=False, action="store_true", help="disable incremental support")
+    p.add_argument("-i, --interactive", dest="interactive", default=False,
+                   action="store_true", help="Use interactive mode")
+    p.add_argument("--no-inc", default=False, action="store_true",
+                   help="disable incremental support")
     args, _ = p.parse_known_args()
 
     encoder = codecs.registry[args.codec]
@@ -69,16 +98,20 @@ def main():
         exit()
 
     src_dir, dest_dir = compute_paths(args)
-
     logging.info("codec is {}", args.codec)
     logging.info("source directory is {}", src_dir.absolute())
     logging.info("destination directory is {}", dest_dir.absolute())
     logging.info("number of threads is {}", args.threads)
 
     journal = VoidJournal() if args.no_inc else Journal(dest_dir)
-    audio_files = walk_and_clone(journal, src_dir, dest_dir, encoder)
 
-    s = Scheduler(audio_files, journal, encoder=encoder, props=get_properties(args, props), threads=args.threads)
+    if args.interactive:
+        audio_files = ask_folders(journal, src_dir, dest_dir, encoder)
+    else:
+        audio_files = walk_and_clone(journal, src_dir, dest_dir, encoder)
+
+    s = Scheduler(audio_files, journal, encoder=encoder,
+                  props=get_properties(args, props), threads=args.threads)
     start = time.time()
     s.run()
     end = time.time()

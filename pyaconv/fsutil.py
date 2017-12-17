@@ -13,21 +13,20 @@ class Path(_SuperPath):
         return Path(os.path.abspath(str(self)))
 
 
-def walk(src_dir, dest_dir, extension):
+def walk(src_dir, dest_dir, extension, base_dir=None):
     """
     Recursively walks the source directory and categorizes files as audio or
     other.
 
     Returns
     """
-    src = Path(src_dir)
-    dest = Path(dest_dir)
-    if not src.exists():
+    base_dir = base_dir or src_dir
+    if not src_dir.exists():
         raise ValueError("source does not exist")
-    if not src.is_dir():
+    if not src_dir.is_dir():
         raise ValueError("source directory is not a directory")
 
-    if dest.exists() and not dest.is_dir():
+    if dest_dir.exists() and not dest_dir.is_dir():
         raise ValueError("destination is not a directory")
 
     audio_files = list()
@@ -38,7 +37,7 @@ def walk(src_dir, dest_dir, extension):
 
             if f.is_file():
                 kind, _ = mimetypes.guess_type(f.absolute().as_uri())
-                clone_path = dest_dir / f.relative_to(src_dir)
+                clone_path = dest_dir / f.relative_to(base_dir)
                 if kind is not None and kind.startswith("audio/"):
                     clone_path = clone_path.with_suffix("." + extension)
                     audio_files.append((f, clone_path))
@@ -47,7 +46,7 @@ def walk(src_dir, dest_dir, extension):
             if f.is_dir():
                 walker(f)
 
-    walker(src)
+    walker(src_dir)
     return audio_files, other_files
 
 
