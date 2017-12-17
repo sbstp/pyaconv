@@ -1,5 +1,16 @@
+import json
+
 from .fsutil import Path
 from . import logging
+
+
+def compare_props(left, right):
+    if len(left) != len(right):
+        return False
+    for key, val in left.items():
+        if right[key] != val:
+            return False
+    return True
 
 
 class BaseJournal:
@@ -26,29 +37,46 @@ class Journal(BaseJournal):
     destination folder around.
     """
 
-    def __init__(self, dest):
+    def __init__(self, dest, props):
         self._log = set()
         self._dest = dest.absolute()
+        self._props = props
         p = Path(dest / ".pyaconv")
         if p.exists():
             with p.open() as f:
-                for item in f.readlines():
-                    self._log.add((dest / item.rstrip()).absolute())
+                for line in f.readlines():
+                    # Parse the line of json and remove the special $path property.
+                    item_props = json.loads(line.rstrip())
+                    path = (dest / Path(item_props.pop("$path"))).absolute()
+                    # Only add log entries that have the same properties.
+                    if compare_props(item_props, props):
+                        self._log.add(path)
         p.parent.mkdir(parents=True, exist_ok=True)
-        self._file = p.open('a')
+        # Override log with valid entries.
+        self._file = p.open('w')
+        for path in self._log:
+            self._write_entry(path)
 
     def __del__(self):
         self._file.close()
 
     def add(self, path):
-        path = path.absolute()
         self._log.add(path)
-        self._file.write(str(path.relative_to(self._dest)))
+        self._write_entry(path)
+
+    def _write_entry(self, path):
+        props = self._props.copy()
+        props["$path"] = str(path.absolute().relative_to(self._dest))
+        self._file.write(json.dumps(props))
         self._file.write("\n")
         self._file.flush()
 
-    def __contains__(self, item):
-        return item in self._log
+    def __contains__(self, path):
+        """
+        The only entries in the log should be the files that have the same properties
+        and that were commited to the log.
+        """
+        return path in self._log
 
     def __len__(self):
         return len(self._log)

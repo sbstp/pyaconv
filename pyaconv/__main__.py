@@ -86,9 +86,9 @@ def main():
     args, _ = p.parse_known_args()
 
     encoder = codecs.registry[args.codec]
-    props = encoder.properties()
+    props_def = encoder.properties()
 
-    for prop in props:
+    for prop in props_def:
         prop.add_argument(p)
 
     args = p.parse_args()
@@ -97,13 +97,15 @@ def main():
         p.print_help()
         exit()
 
+    props = get_properties(args, props_def)
+
     src_dir, dest_dir = compute_paths(args)
     logging.info("codec is {}", args.codec)
     logging.info("source directory is {}", src_dir.absolute())
     logging.info("destination directory is {}", dest_dir.absolute())
     logging.info("number of threads is {}", args.threads)
 
-    journal = VoidJournal() if args.no_inc else Journal(dest_dir)
+    journal = VoidJournal() if args.no_inc else Journal(dest_dir, props)
 
     if args.interactive:
         audio_files = ask_folders(journal, src_dir, dest_dir, encoder)
@@ -111,7 +113,7 @@ def main():
         audio_files = walk_and_clone(journal, src_dir, dest_dir, encoder)
 
     s = Scheduler(audio_files, journal, encoder=encoder,
-                  props=get_properties(args, props), threads=args.threads)
+                  props=props, threads=args.threads)
     start = time.time()
     s.run()
     end = time.time()
