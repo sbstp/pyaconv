@@ -2,6 +2,7 @@ from collections import deque
 import argparse
 import os
 import time
+import json
 
 from . import fsutil, logging, codecs
 from .fsutil import Path
@@ -22,17 +23,47 @@ def ask_folders(journal, src_dir, dest_dir, encoder):
     audio_files = []
     other_files = []
 
-    for path in src_dir.iterdir():
-        answer = ""
-        while answer.lower() not in ["y", "n"]:
-            answer = input("Include %s? [y/n]: " % path.name)
+    resume_path = dest_dir / ".pyaconv.i"
 
-        if answer.lower() == "y":
-            audio, other = fsutil.walk(path, dest_dir, encoder.extension(), src_dir)
+    decisions = dict()
+    # Load the previous decisions.
+    if resume_path.exists():
+        with resume_path.open('r') as f:
+            decisions = json.load(f)
+
+    # Re-load the paths that were wanted.
+    for path in decisions:
+        if decisions[path]:
+            audio, other = fsutil.walk(src_dir / path, dest_dir, encoder.extension(), src_dir)
             audio_files.extend(audio)
             other_files.extend(other)
-        else:
-            pass
+
+    # Compute the list of paths not yet visited.
+    to_visit = [path for path in src_dir.iterdir()
+                if path.is_dir() and str(path.relative_to(src_dir)) not in decisions]
+
+    try:
+        for path in sorted(to_visit):
+            answer = ""
+            while answer.lower() not in ["y", "n"]:
+                try:
+                    answer = input("Include %s? [y/n]: " % path.name)
+                except EOFError:
+                    print('')  # skip line on Ctrl-D
+                    raise StopIteration
+
+            yes = answer.lower() == "y"
+            decisions[str(path.relative_to(src_dir))] = yes
+
+            if answer.lower() == "y":
+                audio, other = fsutil.walk(path, dest_dir, encoder.extension(), src_dir)
+                audio_files.extend(audio)
+                other_files.extend(other)
+    except StopIteration:
+        pass
+    finally:
+        with resume_path.open('w') as f:
+            json.dump(decisions, f)
 
     other_files = deque(journal.remove_journaled(other_files))
     audio_files = deque(journal.remove_journaled(audio_files))
