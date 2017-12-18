@@ -171,7 +171,7 @@ class Worker:
     def _next(self):
         if len(self._queue) > 0:
             src, dest = self._queue.popleft()
-            logging.info("encoding {}", src.absolute())
+            logging.info("encoding {} -> {}", src, dest)
             enc = self._encoder(loop=self._loop, src=src, dest=dest,
                                 eos_cb=self._eos_cb,
                                 err_cb=self._error,

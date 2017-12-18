@@ -82,12 +82,11 @@ class Journal(BaseJournal):
         return len(self._log)
 
     def remove_journaled(self, pairs):
-        for p in pairs:
-            dest = p[1].absolute()
-            if dest in self:
-                logging.info("skipping {}", dest)
+        for src, dest in pairs:
+            if dest.absolute() in self:
+                logging.info("skipping {} (already encoded)", src)
             else:
-                yield p
+                yield (src, dest)
 
 
 class VoidJournal(BaseJournal):

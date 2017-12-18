@@ -105,6 +105,12 @@ def main():
     logging.info("destination directory is {}", dest_dir.absolute())
     logging.info("number of threads is {}", args.threads)
 
+    logging.info("options are:")
+    logging.info("----")
+    for name, val in props.items():
+        logging.info("{}: {}", name, val)
+    logging.info("----")
+
     journal = VoidJournal() if args.no_inc else Journal(dest_dir, props)
 
     if args.interactive:

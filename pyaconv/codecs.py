@@ -17,8 +17,9 @@ class OpusEncoder(BaseEncoder):
     def properties(cls):
         return (
             Property("bitrate", type=int, default=64000, help="bitrate is bits per second"),
-            PropertyEnum("bitrate-type", values=["cbr", "vbr",
-                                                 "constrained_vbr"], default="vbr", help="bitrate type"),
+            PropertyEnum("bitrate-type", values=["cbr", "vbr", "constrained_vbr"],
+                         default="vbr",
+                         help="bitrate type"),
             PropertyEnum("audio-type", values=["generic", "voice"],
                          default="generic", help="audio type to optimize for"),
         )
