@@ -91,6 +91,14 @@ class Journal(BaseJournal):
 
 class VoidJournal(BaseJournal):
 
+    def __init__(self, dest):
+        # Bust the journal if a void journal is used.
+        p = Path(dest / ".pyaconv")
+        try:
+            p.unlink()
+        except FileNotFoundError:
+            pass
+
     def add(self, path):
         pass
 

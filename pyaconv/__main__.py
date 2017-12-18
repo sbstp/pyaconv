@@ -111,7 +111,7 @@ def main():
         logging.info("{}: {}", name, val)
     logging.info("----")
 
-    journal = VoidJournal() if args.no_inc else Journal(dest_dir, props)
+    journal = VoidJournal(dest_dir) if args.no_inc else Journal(dest_dir, props)
 
     if args.interactive:
         audio_files = ask_folders(journal, src_dir, dest_dir, encoder)
