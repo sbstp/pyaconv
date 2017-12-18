@@ -1,6 +1,6 @@
-from gi.repository import Gst
+from gi.repository import GObject, Gst
 
-from .gst import BaseEncoder, Property, PropertyEnum, PropertyRange
+from .gst import duration, BaseEncoder, Property, PropertyEnum, PropertyRange
 
 _OPUS_PIPELINE = """filesrc name=src ! decodebin ! audioconvert ! \
 audioresample ! opusenc name=enc ! oggmux ! filesink name=dest"""
@@ -41,6 +41,18 @@ audioresample ! lamemp3enc name=enc ! id3v2mux ! filesink name=dest"""
 
 
 class Mp3Encoder(BaseEncoder):
+
+    def start(self):
+        super().start()
+        print("hook start")
+        dur = duration(self.src)
+        if self.setter:
+            print('Setting duration')
+            val = GObject.Value()
+            val.init(GObject.TYPE_UINT64)
+            val.set_uint64(dur)
+            self.setter.add_tag_value(Gst.TagMergeMode.REPLACE, Gst.TAG_DURATION, val)
+            self.setter.add_tag_value(Gst.TagMergeMode.REPLACE, Gst.TAG_BITRATE, 48000)
 
     def apply_props(self, props, enc):
         if props["bitrate"]:

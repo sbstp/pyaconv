@@ -5,7 +5,7 @@ import time
 
 from . import fsutil, logging, codecs
 from .fsutil import Path
-from .gst import Scheduler
+from .gst import duration, Scheduler
 from .journal import Journal, VoidJournal
 
 
@@ -72,6 +72,8 @@ def format_time(time):
 
 
 def main():
+    # print(duration(Path("oy.ymp3")))
+
     p = argparse.ArgumentParser(prog="pyaconv", add_help=False)
     p.add_argument("src", nargs="?", default=None, help="source directory")
     p.add_argument("dest", nargs="?", default=None, help="destination directory, optional")

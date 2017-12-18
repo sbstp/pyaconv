@@ -95,6 +95,10 @@ class BaseEncoder:
         self._eos_cb = eos_cb
         self._err_cb = err_cb
 
+        self.src = src
+        self.dest = dest
+        self.setter = self._pipeline.get_by_interface(Gst.TagSetter)
+
         self._bus.add_watch(0, self._bus_callback, None)
 
         self._src.set_property("location", src)
@@ -219,3 +223,31 @@ class Scheduler:
         # check for early exits when the queue is empty
         if not self._has_quit:
             self._loop.run()
+
+
+def duration(path):
+    """
+    Accurate detection of MP3 duration: https://blog.affien.com/archives/2009/04/19/gstreamer-accurate-duration/
+    """
+    pipeline = Gst.parse_launch("filesrc name=src ! decodebin ! fakesink name=sink")
+    src = pipeline.get_by_name("src")
+    sink = pipeline.get_by_name("sink")
+    bus = pipeline.get_bus()
+
+    src.set_property("location", str(path.absolute()))
+    pipeline.set_state(Gst.State.PLAYING)
+
+    message = bus.timed_pop_filtered(Gst.CLOCK_TIME_NONE, Gst.MessageType.ERROR | Gst.MessageType.EOS)
+    try:
+        if message.type == Gst.MessageType.EOS:
+            query = Gst.Query.new_duration(Gst.Format.TIME)
+            if sink.query(query):
+                _, duration = query.parse_duration()
+                return duration
+            else:
+                raise Exception("duration query failed")
+        elif message.type == Gst.MessageType.ERROR:
+            err, _ = message.parse_error()
+            raise Exception(err)
+    finally:
+        pipeline.set_state(Gst.State.NULL)
