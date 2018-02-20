@@ -14,6 +14,8 @@ def compute_paths(args):
     src_dir = Path(args.src)
     if args.dest:
         dest_dir = Path(args.dest)
+        if args.keep:
+            dest_dir = dest_dir / src_dir.name
     else:
         dest_dir = Path(args.src).with_suffix('.' + args.codec)
     return src_dir, dest_dir
@@ -114,6 +116,7 @@ def main():
                    action="store_true", help="Use interactive mode")
     p.add_argument("--no-inc", default=False, action="store_true",
                    help="disable incremental support")
+    p.add_argument('-k, --keep', action='store_true', dest="keep", default=False, help="keep source name folder")
     args, _ = p.parse_known_args()
 
     encoder = codecs.registry[args.codec]
